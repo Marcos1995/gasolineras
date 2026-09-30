@@ -168,10 +168,8 @@
     .fuels button[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); }
     .meta {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      gap: 0.5rem;
-      padding: 0.55rem 1rem 0.35rem;
+      padding: 0.55rem 1rem 0.4rem;
       font-family: "Space Grotesk", system-ui, sans-serif;
       font-size: 11px;
       font-weight: 600;
@@ -179,16 +177,28 @@
       text-transform: uppercase;
       color: var(--muted);
     }
-    #sort {
+    .modes {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.25rem;
+      margin: 0 1rem 0.45rem;
+      background: var(--soft);
+      border-radius: 4px;
+      padding: 0.2rem;
+    }
+    .modes button {
       border: 0;
       background: transparent;
+      border-radius: 4px;
+      padding: 0.4rem 0.45rem;
       cursor: pointer;
-      font: inherit;
-      letter-spacing: inherit;
-      text-transform: inherit;
-      color: var(--accent-text);
-      padding: 0.15rem 0;
+      font-family: "Space Grotesk", system-ui, sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: var(--muted);
     }
+    .modes button[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); }
     #lista {
       list-style: none;
       margin: 0;
@@ -312,6 +322,7 @@
     .pin-body.cheap { background: var(--accent); color: #fff; }
     .pin-body small { font-size: 9px; letter-spacing: 0.04em; font-weight: 600; }
     .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface); color: var(--ink); }
+    .leaflet-popup-content .ruta { display: inline-block; margin-top: 0.45rem; }
     .leaflet-bar a { background: var(--surface); color: var(--ink); border-color: var(--line); }
     .leaflet-container { font-family: "Source Sans 3", system-ui, sans-serif; }
     .leaflet-control-attribution { font-size: 10px; max-width: calc(100% - 8px); }
@@ -368,7 +379,10 @@
       </div>
       <div class="meta">
         <span id="count">Leyendo precios</span>
-        <button type="button" id="sort">Por precio</button>
+      </div>
+      <div class="modes" role="radiogroup" aria-label="Orden">
+        <button type="button" role="radio" data-sort="precio" aria-checked="true">Por precio</button>
+        <button type="button" role="radio" data-sort="dist" aria-checked="false">Por distancia</button>
       </div>
       <ul id="lista"></ul>
       <p class="note" id="note">Los precios se actualizan cada media hora. La recarga eléctrica no publica el €/kWh.</p>
@@ -417,6 +431,8 @@
       attribution: "&copy; OpenStreetMap"
     }).addTo(map);
     const pins = L.layerGroup().addTo(map);
+    const markers = new Map();
+    let openId = null;
 
     function num(v) {
       if (v == null || v === "") return null;
@@ -481,36 +497,48 @@
         iconAnchor: cheap ? [39, 40] : [29, 24]
       });
     }
+    function popupHtml(s) {
+      const dist = s.dist != null ? `<br>${fmtKm(s.dist)}` : "";
+      return `<strong>${esc(s.name)}</strong><br>${esc(s.addr)}${dist}<br><b>${fmt(s.price)} €/L</b><br><a class="ruta" href="https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}" target="_blank" rel="noopener">Ruta</a>`;
+    }
+    function inView(list) {
+      if (!fitted) return list;
+      const bounds = map.getBounds();
+      return list.filter((s) => bounds.contains([s.lat, s.lng]));
+    }
     function drawPins(list) {
+      const keep = openId;
       pins.clearLayers();
-      const zoom = map.getZoom();
-      let show = list.slice(0, 20);
-      if (zoom >= 12) {
-        const b = map.getBounds();
-        const inView = list.filter((s) => b.contains([s.lat, s.lng]));
-        show = (inView.length ? inView : show).slice(0, 80);
-      }
+      markers.clear();
       const min = list.length ? Math.min(...list.map((s) => s.price)) : null;
-      for (const s of show) {
-        const cheap = s.price === min;
-        const marker = L.marker([s.lat, s.lng], { icon: pinIcon(s, cheap) });
-        marker.bindPopup(`<strong>${esc(s.name)}</strong><br>${esc(s.addr)}<br><b>${fmt(s.price)} €/L</b>`);
+      for (const s of list) {
+        const marker = L.marker([s.lat, s.lng], { icon: pinIcon(s, s.price === min) });
+        marker.bindPopup(popupHtml(s));
+        marker.on("popupclose", () => { if (openId === s.id) openId = null; });
         marker.addTo(pins);
+        markers.set(s.id, marker);
+      }
+      if (keep && markers.has(keep)) {
+        openId = keep;
+        markers.get(keep).openPopup();
       }
     }
     function render() {
-      const list = stations();
-      const min = list.length ? list.reduce((m, s) => Math.min(m, s.price), Infinity) : null;
-      const top = list.slice(0, 20);
+      const all = stations();
+      const view = inView(all);
+      const list = view.slice(0, 40);
+      const min = list.length ? Math.min(...list.map((s) => s.price)) : null;
       const fuelName = document.querySelector('.fuels button[aria-checked="true"]').textContent;
-      count.textContent = list.length
-        ? `${list.length} con ${fuelName}`
+      for (const b of document.querySelectorAll(".modes button")) b.setAttribute("aria-checked", String(b.dataset.sort === sortBy));
+      count.textContent = view.length
+        ? `${view.length} en el mapa · ${fuelName}`
         : `Sin precio de ${fuelName}`;
-      $("sort").textContent = sortBy === "dist" ? "Por distancia" : "Por precio";
-      if (!list.length) {
+      if (!all.length) {
         lista.innerHTML = `<li class="empty">Ninguna estación informa este carburante en la provincia.</li>`;
+      } else if (!view.length) {
+        lista.innerHTML = `<li class="empty">Ninguna en esta zona del mapa. Aleja el zoom para ver más.</li>`;
       } else {
-        lista.innerHTML = top.map((s) => {
+        lista.innerHTML = list.map((s) => {
           const cheap = s.price === min;
           const extra = cheap ? `<span class="badge">Más económica</span>` : "";
           const dist = s.dist != null ? ` · ${fmtKm(s.dist)}` : "";
@@ -526,9 +554,9 @@
         }).join("");
       }
       drawPins(list);
-      if (!fitted && list.length) {
+      if (!fitted && all.length) {
         fitted = true;
-        map.fitBounds(L.latLngBounds(list.map((s) => [s.lat, s.lng])), { padding: [28, 28], maxZoom: 12 });
+        map.fitBounds(L.latLngBounds(all.map((s) => [s.lat, s.lng])), { padding: [28, 28], maxZoom: 12 });
       }
       document.documentElement.dataset.ready = list.length ? "1" : "0";
     }
@@ -581,6 +609,7 @@
         if (hereMark) map.removeLayer(hereMark);
         hereMark = L.circleMarker([here.lat, here.lng], { radius: 7, color: "#0f6e56", fillColor: "#84d6b9", fillOpacity: 1, weight: 2 }).addTo(map);
         sortBy = "dist";
+        for (const b of document.querySelectorAll(".modes button")) b.setAttribute("aria-checked", String(b.dataset.sort === "dist"));
         const id = nearestId(here.lat, here.lng);
         if (id && id !== provincia.value) {
           provincia.value = id;
@@ -596,9 +625,11 @@
     provincia.addEventListener("change", () => load(provincia.value));
     $("refresh").addEventListener("click", () => load(provincia.value));
     $("locate").addEventListener("click", locate);
-    $("sort").addEventListener("click", () => {
-      if (sortBy === "precio" && !here) { locate(); return; }
-      sortBy = sortBy === "precio" ? "dist" : "precio";
+    document.querySelector(".modes").addEventListener("click", (ev) => {
+      const btn = ev.target.closest("button");
+      if (!btn) return;
+      if (btn.dataset.sort === "dist" && !here) { locate(); return; }
+      sortBy = btn.dataset.sort;
       render();
     });
     document.querySelector(".fuels").addEventListener("click", (ev) => {
@@ -614,13 +645,14 @@
       if (!btn) return;
       const s = stations().find((item) => item.id === btn.dataset.id);
       if (!s) return;
+      openId = s.id;
       fitted = true;
       map.setView([s.lat, s.lng], Math.max(map.getZoom(), 14));
-      drawPins(stations());
+      render();
     });
     map.on("moveend", () => {
       clearTimeout(moveT);
-      moveT = setTimeout(() => { if (rows.length) drawPins(stations()); }, 120);
+      moveT = setTimeout(() => { if (rows.length && fitted) render(); }, 150);
     });
 
     (async function init() {
