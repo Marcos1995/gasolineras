@@ -7,7 +7,7 @@
 - Vista local: `index.html` (con red; la página pide la API del Ministerio)
 
 ## Estado
-- Mapa de España por provincia: gasolina 95, 98, diésel y GLP, con el precio oficial en vivo.
+- Mapa de España: gasolina 95, 98, diésel y GLP. Al moverte se cargan hasta 3 provincias de la vista, no toda España. Actualizar refresca esas.
 - Por distancia: si hay GPS, los km salen de ese punto aunque muevas el mapa; si no, del centro de lo que estás viendo. Por precio no usa un lugar.
 - Ruta dibuja el camino en coche desde el GPS con OSRM (OpenStreetMap): minutos y kilómetros, sin tráfico en vivo.
 - La propia API dice que los precios se actualizan cada media hora. Recargar antes no aporta.

@@ -596,7 +596,7 @@
       if (!all.length) {
         lista.innerHTML = `<li class="empty">Ninguna estación informa este carburante en la provincia.</li>`;
       } else if (!view.length) {
-        lista.innerHTML = `<li class="empty">Ninguna en esta zona del mapa. Aleja el zoom para ver más.</li>`;
+        lista.innerHTML = `<li class="empty">Ninguna en esta zona del mapa.</li>`;
       } else {
         lista.innerHTML = list.map((s) => {
           const cheap = s.price === min;
@@ -621,27 +621,60 @@
       }
       document.documentElement.dataset.ready = list.length ? "1" : "0";
     }
-    async function load(id) {
+    let loadedIds = [];
+    function sameIds(a, b) {
+      return a.length === b.length && a.slice().sort().join() === b.slice().sort().join();
+    }
+    function provincesForView() {
+      if (!fitted || !provincia.options.length) return [];
+      const center = map.getCenter();
+      const bounds = map.getBounds().pad(0.6);
+      const ranked = [];
+      for (const opt of provincia.options) {
+        const c = CENTER[parseInt(opt.value, 10)];
+        if (!c) continue;
+        const ll = L.latLng(c[0], c[1]);
+        ranked.push({ id: opt.value, d: center.distanceTo(ll), inside: bounds.contains(ll) });
+      }
+      ranked.sort((a, b) => a.d - b.d);
+      const inside = ranked.filter((p) => p.inside).slice(0, 3);
+      return (inside.length ? inside : ranked.slice(0, 1)).map((p) => p.id);
+    }
+    async function load(ids, keepView) {
+      const list = (Array.isArray(ids) ? ids : [ids]).filter(Boolean).slice(0, 3);
+      if (!list.length) return;
       ctrl?.abort();
       ctrl = new AbortController();
+      const signal = ctrl.signal;
       $("refresh").disabled = true;
       count.textContent = "Leyendo precios";
-      fitted = false;
-      clearRoute();
+      if (!keepView) {
+        fitted = false;
+        clearRoute();
+      }
       try {
-        const res = await fetch(`${API}/EstacionesTerrestres/FiltroProvincia/${encodeURIComponent(id)}`, {
-          headers: { Accept: "application/json" },
-          signal: ctrl.signal
-        });
-        if (!res.ok) throw new Error(String(res.status));
-        const data = await res.json();
-        rows = data.ListaEESSPrecio || [];
-        stamp.textContent = data.Fecha ? `Datos del Ministerio · ${data.Fecha}` : "Datos del Ministerio";
-        try { localStorage.setItem("precio-prov", id); } catch (e) {}
+        const parts = await Promise.all(list.map(async (id) => {
+          const res = await fetch(`${API}/EstacionesTerrestres/FiltroProvincia/${encodeURIComponent(id)}`, {
+            headers: { Accept: "application/json" },
+            signal
+          });
+          if (!res.ok) throw new Error(String(res.status));
+          return res.json();
+        }));
+        rows = parts.flatMap((d) => d.ListaEESSPrecio || []);
+        const fecha = parts.map((d) => d.Fecha).find(Boolean);
+        stamp.textContent = fecha ? `Datos del Ministerio · ${fecha}` : "Datos del Ministerio";
+        loadedIds = list.slice();
+        if (keepView) {
+          const centerId = nearestId(map.getCenter().lat, map.getCenter().lng);
+          if (centerId) provincia.value = centerId;
+        }
+        try { localStorage.setItem("precio-prov", provincia.value); } catch (e) {}
         render();
       } catch (err) {
         if (err.name === "AbortError") return;
         rows = [];
+        loadedIds = [];
         lista.innerHTML = `<li class="empty">No se han podido leer los precios del Ministerio. Prueba a actualizar.</li>`;
         count.textContent = "Sin datos";
         document.documentElement.dataset.ready = "err";
@@ -724,8 +757,8 @@
       }, () => { count.textContent = "Sin permiso de ubicación"; });
     }
 
-    provincia.addEventListener("change", () => load(provincia.value));
-    $("refresh").addEventListener("click", () => load(provincia.value));
+    provincia.addEventListener("change", () => load([provincia.value]));
+    $("refresh").addEventListener("click", () => load(loadedIds.length ? loadedIds : [provincia.value], true));
     $("locate").addEventListener("click", locate);
     $("route-clear").addEventListener("click", clearRoute);
     function onRouteClick(ev) {
@@ -770,7 +803,12 @@
     });
     map.on("moveend", () => {
       clearTimeout(moveT);
-      moveT = setTimeout(() => { if (rows.length && fitted) render(); }, 150);
+      moveT = setTimeout(() => {
+        if (!fitted) return;
+        const ids = provincesForView();
+        if (ids.length && !sameIds(ids, loadedIds)) load(ids, true);
+        else if (rows.length) render();
+      }, 200);
     });
 
     (async function init() {
