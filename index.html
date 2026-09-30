@@ -199,6 +199,28 @@
       color: var(--muted);
     }
     .modes button[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); }
+    .route {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin: 0 1rem 0.45rem;
+      padding: 0.45rem 0.6rem;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 4px;
+      font-family: "Space Grotesk", system-ui, sans-serif;
+      font-weight: 600;
+    }
+    .route[hidden] { display: none; }
+    .route button {
+      border: 0;
+      background: transparent;
+      color: #fff;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 600;
+    }
     #lista {
       list-style: none;
       margin: 0;
@@ -384,6 +406,10 @@
         <button type="button" role="radio" data-sort="precio" aria-checked="true">Por precio</button>
         <button type="button" role="radio" data-sort="dist" aria-checked="false">Por distancia</button>
       </div>
+      <p id="route" class="route" hidden>
+        <span id="route-text"></span>
+        <button type="button" id="route-clear">Quitar</button>
+      </p>
       <ul id="lista"></ul>
       <p class="note" id="note">Los precios se actualizan cada media hora. La recarga eléctrica no publica el €/kWh.</p>
     </section>
@@ -431,6 +457,7 @@
       attribution: "&copy; OpenStreetMap"
     }).addTo(map);
     const pins = L.layerGroup().addTo(map);
+    let routeLine = null;
     const markers = new Map();
     let openId = null;
 
@@ -566,6 +593,7 @@
       $("refresh").disabled = true;
       count.textContent = "Leyendo precios";
       fitted = false;
+      clearRoute();
       try {
         const res = await fetch(`${API}/EstacionesTerrestres/FiltroProvincia/${encodeURIComponent(id)}`, {
           headers: { Accept: "application/json" },
@@ -598,6 +626,46 @@
       }
       return best;
     }
+    function clearRoute() {
+      if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+      $("route").hidden = true;
+    }
+    function askHere() {
+      if (here) return Promise.resolve(here);
+      return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) { reject(new Error("no")); return; }
+        navigator.geolocation.getCurrentPosition((pos) => {
+          here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          if (hereMark) map.removeLayer(hereMark);
+          hereMark = L.circleMarker([here.lat, here.lng], { radius: 7, color: "#0f6e56", fillColor: "#84d6b9", fillOpacity: 1, weight: 2 }).addTo(map);
+          resolve(here);
+        }, () => reject(new Error("denied")));
+      });
+    }
+    async function routeTo(dest) {
+      count.textContent = "Calculando ruta";
+      try {
+        const origin = await askHere();
+        const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        const data = await res.json();
+        const path = data.routes && data.routes[0];
+        if (!res.ok || !path) throw new Error("no");
+        if (routeLine) map.removeLayer(routeLine);
+        routeLine = L.geoJSON(path.geometry, { style: { color: "#0f6e56", weight: 5, opacity: 0.95 } }).addTo(map);
+        fitted = true;
+        map.fitBounds(routeLine.getBounds(), { padding: [36, 36] });
+        const minutes = Math.max(1, Math.round(path.duration / 60));
+        $("route-text").textContent = `${minutes} min · ${fmtKm(path.distance / 1000)} en coche`;
+        $("route").hidden = false;
+      } catch (err) {
+        if (err.message === "denied" || err.message === "no") {
+          count.textContent = "Sin permiso de ubicación";
+          return;
+        }
+        window.open(`https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}`, "_blank", "noopener");
+      }
+    }
     function locate() {
       if (!navigator.geolocation) {
         count.textContent = "Este navegador no da la ubicación";
@@ -625,6 +693,23 @@
     provincia.addEventListener("change", () => load(provincia.value));
     $("refresh").addEventListener("click", () => load(provincia.value));
     $("locate").addEventListener("click", locate);
+    $("route-clear").addEventListener("click", clearRoute);
+    function onRouteClick(ev) {
+      const link = ev.target.closest("a.ruta");
+      if (!link) return;
+      ev.preventDefault();
+      const dest = new URL(link.href).searchParams.get("destination");
+      if (!dest) return;
+      const [lat, lng] = dest.split(",").map(Number);
+      routeTo({ lat, lng });
+    }
+    document.addEventListener("click", onRouteClick);
+    map.on("popupopen", (ev) => {
+      const link = ev.popup.getElement().querySelector("a.ruta");
+      if (!link || link.dataset.bound) return;
+      link.dataset.bound = "1";
+      link.addEventListener("click", onRouteClick);
+    });
     document.querySelector(".modes").addEventListener("click", (ev) => {
       const btn = ev.target.closest("button");
       if (!btn) return;

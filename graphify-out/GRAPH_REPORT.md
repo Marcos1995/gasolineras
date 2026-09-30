@@ -1,7 +1,7 @@
 # Graph Report - gasolineras  (2026-10-01)
 
 ## Corpus Check
-- 13 files · ~4,894 words
+- 13 files · ~5,253 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 2 file(s) not represented in the graph (top: .mdc 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `72ae87d8`
+- Built from commit: `c314aa3d`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 

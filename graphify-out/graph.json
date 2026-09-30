@@ -113,7 +113,7 @@
       "node_kind": "heading",
       "norm_label": "comandos utiles",
       "source_file": "PROJECT.md",
-      "source_location": "L18"
+      "source_location": "L19"
     },
     {
       "id": "project_contexto_del_proyecto",
@@ -149,7 +149,7 @@
       "node_kind": "heading",
       "norm_label": "notas para el agente",
       "source_file": "PROJECT.md",
-      "source_location": "L23"
+      "source_location": "L24"
     },
     {
       "id": "project_produccion",
@@ -173,7 +173,7 @@
       "node_kind": "heading",
       "norm_label": "stack",
       "source_file": "PROJECT.md",
-      "source_location": "L15"
+      "source_location": "L16"
     },
     {
       "id": "docs_decisiones",
@@ -968,7 +968,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT.md",
-      "source_location": "L15",
+      "source_location": "L16",
       "weight": 1.0
     },
     {
@@ -979,7 +979,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT.md",
-      "source_location": "L18",
+      "source_location": "L19",
       "weight": 1.0
     },
     {
@@ -990,7 +990,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT.md",
-      "source_location": "L23",
+      "source_location": "L24",
       "weight": 1.0
     },
     {
@@ -1050,5 +1050,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "72ae87d88288bc46fcd7dd815c893b03d32dd78d"
+  "built_at_commit": "c314aa3db63445c29f2a782dbfaac1e0a26f78a8"
 }

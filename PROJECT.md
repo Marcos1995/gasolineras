@@ -8,7 +8,8 @@
 
 ## Estado
 - Mapa de España por provincia: gasolina 95, 98, diésel y GLP, con el precio oficial en vivo.
-- La lista ordena por precio o por distancia las estaciones que se ven en el mapa. La ficha del mapa incluye la ruta.
+- La lista ordena por precio o por distancia las estaciones que se ven en el mapa.
+- Ruta dibuja el camino en coche desde el GPS con OSRM (OpenStreetMap): minutos y kilómetros, sin tráfico en vivo.
 - La propia API dice que los precios se actualizan cada media hora. Recargar antes no aporta.
 - La recarga eléctrica no entra: el €/kWh no está en una API pública anónima.
 
