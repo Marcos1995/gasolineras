@@ -199,6 +199,12 @@
       color: var(--muted);
     }
     .modes button[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); }
+    .from {
+      margin: 0 1rem 0.4rem;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .from[hidden] { display: none; }
     .route {
       display: flex;
       align-items: center;
@@ -406,6 +412,7 @@
         <button type="button" role="radio" data-sort="precio" aria-checked="true">Por precio</button>
         <button type="button" role="radio" data-sort="dist" aria-checked="false">Por distancia</button>
       </div>
+      <p id="from" class="from" hidden></p>
       <p id="route" class="route" hidden>
         <span id="route-text"></span>
         <button type="button" id="route-clear">Quitar</button>
@@ -445,6 +452,7 @@
     let rows = [];
     let here = null;
     let hereMark = null;
+    let centerMark = null;
     let sortBy = "precio";
     let fuel = "g95";
     let ctrl = null;
@@ -506,11 +514,13 @@
           hours: row.Horario || "",
           lat, lng, price
         };
-        if (here) item.dist = km(here, item);
+        const origin = sortBy === "dist" ? (here || mapCenter()) : null;
+        if (origin) item.dist = km(origin, item);
         out.push(item);
       }
-      const cheap = sortBy === "dist" && here;
-      out.sort((a, b) => cheap ? a.dist - b.dist : a.price - b.price || a.name.localeCompare(b.name, "es"));
+      out.sort((a, b) => sortBy === "dist" && a.dist != null
+        ? a.dist - b.dist
+        : a.price - b.price || a.name.localeCompare(b.name, "es"));
       return out;
     }
     function pinIcon(item, cheap) {
@@ -527,6 +537,25 @@
     function popupHtml(s) {
       const dist = s.dist != null ? `<br>${fmtKm(s.dist)}` : "";
       return `<strong>${esc(s.name)}</strong><br>${esc(s.addr)}${dist}<br><b>${fmt(s.price)} €/L</b><br><a class="ruta" href="https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}" target="_blank" rel="noopener">Ruta</a>`;
+    }
+    function mapCenter() {
+      if (!fitted) return null;
+      const c = map.getCenter();
+      return { lat: c.lat, lng: c.lng };
+    }
+    function syncCenter() {
+      const show = sortBy === "dist" && !here && fitted;
+      if (!show) {
+        if (centerMark) { map.removeLayer(centerMark); centerMark = null; }
+        return;
+      }
+      const c = map.getCenter();
+      if (!centerMark) {
+        centerMark = L.circleMarker(c, { radius: 8, color: "#0f6e56", weight: 2, fillColor: "#ffffff", fillOpacity: 1 }).addTo(map);
+      } else {
+        centerMark.setLatLng(c);
+      }
+      centerMark.bringToFront();
     }
     function inView(list) {
       if (!fitted) return list;
@@ -560,6 +589,10 @@
       count.textContent = view.length
         ? `${view.length} en el mapa · ${fuelName}`
         : `Sin precio de ${fuelName}`;
+      $("from").hidden = sortBy !== "dist";
+      $("from").textContent = here
+        ? "Distancias desde donde estás"
+        : "Distancias desde el centro del mapa";
       if (!all.length) {
         lista.innerHTML = `<li class="empty">Ninguna estación informa este carburante en la provincia.</li>`;
       } else if (!view.length) {
@@ -581,6 +614,7 @@
         }).join("");
       }
       drawPins(list);
+      syncCenter();
       if (!fitted && all.length) {
         fitted = true;
         map.fitBounds(L.latLngBounds(all.map((s) => [s.lat, s.lng])), { padding: [28, 28], maxZoom: 12 });
@@ -713,7 +747,6 @@
     document.querySelector(".modes").addEventListener("click", (ev) => {
       const btn = ev.target.closest("button");
       if (!btn) return;
-      if (btn.dataset.sort === "dist" && !here) { locate(); return; }
       sortBy = btn.dataset.sort;
       render();
     });
